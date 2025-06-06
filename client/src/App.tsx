@@ -30,6 +30,7 @@ interface GameState {
   hints: Hint[];
   guessAttempts: number;
   maxGuessAttempts: number;
+  disconnectedCount?: number; // 斷線玩家數量（可選，向後兼容）
 }
 
 interface Message {
@@ -120,6 +121,7 @@ const PlayerGrid = styled.div`
 interface PlayerCardProps {
   isExpert?: boolean;
   isRoomLeader?: boolean;
+  isCurrentPlayer?: boolean;
 }
 
 const PlayerCard = styled.div<PlayerCardProps>`
@@ -129,6 +131,7 @@ const PlayerCard = styled.div<PlayerCardProps>`
   text-align: center;
   transition: all 0.3s ease;
   border: 2px solid #e9ecef;
+  position: relative;
 
   ${props => props.isExpert && `
     border-color: #ffd700;
@@ -138,6 +141,25 @@ const PlayerCard = styled.div<PlayerCardProps>`
 
   ${props => props.isRoomLeader && `
     border-color: #dc3545;
+  `}
+
+  ${props => props.isCurrentPlayer && `
+    border-color: #667eea;
+    border-width: 3px;
+    box-shadow: 0 0 15px rgba(102, 126, 234, 0.3);
+    
+    &::before {
+      content: '👤 你';
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #667eea;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 0.75em;
+      font-weight: bold;
+    }
   `}
 `;
 
@@ -453,12 +475,14 @@ const App: React.FC = () => {
         key={player.id}
         isExpert={gameState.gamePhase === 'playing' && gameState.currentExpert?.id === player.id}
         isRoomLeader={gameState.roomLeader === player.id}
+        isCurrentPlayer={currentPlayer?.id === player.id}
       >
         <div style={{ fontWeight: 'bold' }}>{player.nickname}</div>
         <div style={{ fontSize: '0.9em', color: '#666', margin: '5px 0' }}>
           {gameState.roomLeader === player.id && '👑 室長 '}
           {gameState.gamePhase === 'playing' && gameState.currentExpert?.id === player.id && '🎯 專家 '}
           {gameState.gamePhase === 'waiting' && (player.ready ? '✅ 準備' : '⏳ 未準備')}
+          {currentPlayer?.id === player.id && '🔵 你'}
         </div>
         <div style={{ fontWeight: 'bold', color: '#667eea' }}>得分: {player.score}</div>
       </PlayerCard>
@@ -672,6 +696,11 @@ const App: React.FC = () => {
           <div>
             <strong>玩家人數：</strong>
             <span>{gameState.playerCount}/{gameState.maxPlayers}</span>
+            {gameState.disconnectedCount && gameState.disconnectedCount > 0 && (
+              <span style={{ color: '#dc3545', marginLeft: '10px' }}>
+                (斷線: {gameState.disconnectedCount})
+              </span>
+            )}
           </div>
         </StatusBar>
 

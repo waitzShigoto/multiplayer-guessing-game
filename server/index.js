@@ -60,18 +60,21 @@ class ChatManager {
 // 遊戲狀態管理
 class GameState {
   constructor() {
-    this.players = new Map();
+    this.players = new Map(); // socketId -> player
+    this.playersByNickname = new Map(); // nickname -> player (用於重連)
+    this.disconnectedPlayers = new Map(); // nickname -> player (暫時斷線的玩家)
     this.gamePhase = 'waiting'; // waiting, playing, finished
-    this.currentExpert = 0;
+    this.currentExpertId = null; // 改用玩家ID而不是索引
     this.round = 1;
     this.currentTopic = '';
     this.currentCategory = '';
     this.hints = [];
     this.roomLeader = null;
-    this.maxPlayers = parseInt(process.env.MAX_PLAYERS) || 8;
-    this.minPlayers = parseInt(process.env.MIN_PLAYERS) || 3;
+    this.maxPlayers = 8;
+    this.minPlayers = 3;
     this.guessAttempts = 0;
-    this.maxGuessAttempts = parseInt(process.env.MAX_GUESS_ATTEMPTS) || 3;
+    this.maxGuessAttempts = 3;
+    this.reconnectTimeout = 30000; // 30秒重連時間
     
     this.topics = [
       { 
@@ -102,15 +105,26 @@ class GameState {
   }
 
   addPlayer(socketId, nickname) {
+    // 檢查是否為重連玩家
+    const disconnectedPlayer = this.disconnectedPlayers.get(nickname);
+    if (disconnectedPlayer) {
+      // 重連邏輯
+      return this.reconnectPlayer(socketId, nickname);
+    }
+
+    // 檢查遊戲狀態 - 遊戲進行中不允許新玩家加入
+    if (this.gamePhase === 'playing') {
+      return { success: false, message: '遊戲進行中，無法加入新玩家。請等待本局結束。' };
+    }
+
+    // 檢查房間是否已滿
     if (this.players.size >= this.maxPlayers) {
       return { success: false, message: '房間已滿' };
     }
 
     // 檢查暱稱是否重複
-    for (let player of this.players.values()) {
-      if (player.nickname === nickname) {
-        return { success: false, message: '暱稱已被使用' };
-      }
+    if (this.playersByNickname.has(nickname)) {
+      return { success: false, message: '暱稱已被使用' };
     }
 
     const player = {
@@ -118,40 +132,97 @@ class GameState {
       nickname,
       ready: false,
       score: 0,
-      connected: true
+      connected: true,
+      joinTime: Date.now()
     };
 
     this.players.set(socketId, player);
+    this.playersByNickname.set(nickname, player);
 
     // 設定第一個玩家為室長
     if (this.players.size === 1) {
       this.roomLeader = socketId;
     }
 
-    return { success: true, player };
+    return { success: true, player, isReconnect: false };
+  }
+
+  reconnectPlayer(socketId, nickname) {
+    const disconnectedPlayer = this.disconnectedPlayers.get(nickname);
+    if (!disconnectedPlayer) {
+      return { success: false, message: '找不到斷線的玩家記錄' };
+    }
+
+    // 更新玩家的socket ID
+    disconnectedPlayer.id = socketId;
+    disconnectedPlayer.connected = true;
+
+    // 移回到活躍玩家列表
+    this.players.set(socketId, disconnectedPlayer);
+    this.disconnectedPlayers.delete(nickname);
+
+    // 如果重連的玩家原本是室長，恢復室長身份
+    if (disconnectedPlayer.wasRoomLeader) {
+      this.roomLeader = socketId;
+      delete disconnectedPlayer.wasRoomLeader;
+    }
+
+    return { 
+      success: true, 
+      player: disconnectedPlayer, 
+      isReconnect: true,
+      gameState: this.getGameState()
+    };
   }
 
   removePlayer(socketId) {
     const player = this.players.get(socketId);
     if (!player) return false;
 
-    this.players.delete(socketId);
-
-    // 如果室長離開，選擇新室長
-    if (this.roomLeader === socketId && this.players.size > 0) {
-      this.roomLeader = this.players.keys().next().value;
-    }
-
-    // 如果當前專家離開，跳到下一個
+    // 如果遊戲正在進行，將玩家標記為斷線而不是完全移除
     if (this.gamePhase === 'playing') {
-      const playersArray = Array.from(this.players.keys());
-      const expertId = playersArray[this.currentExpert];
-      if (expertId === socketId) {
-        this.nextExpert();
+      player.connected = false;
+      
+      // 如果是室長斷線，記錄這個狀態
+      if (this.roomLeader === socketId) {
+        player.wasRoomLeader = true;
+        // 暫時選擇新室長
+        const connectedPlayers = Array.from(this.players.values()).filter(p => p.connected && p.id !== socketId);
+        if (connectedPlayers.length > 0) {
+          this.roomLeader = connectedPlayers[0].id;
+        }
       }
-    }
 
-    return true;
+      // 移到斷線玩家列表
+      this.disconnectedPlayers.set(player.nickname, player);
+      this.players.delete(socketId);
+
+      // 設定重連超時
+      setTimeout(() => {
+        if (this.disconnectedPlayers.has(player.nickname)) {
+          this.disconnectedPlayers.delete(player.nickname);
+          this.playersByNickname.delete(player.nickname);
+          
+          // 如果是當前專家斷線且超時，跳到下一個專家
+          if (this.currentExpertId === socketId) {
+            this.nextExpert();
+          }
+        }
+      }, this.reconnectTimeout);
+
+      return true;
+    } else {
+      // 遊戲未開始，完全移除玩家
+      this.players.delete(socketId);
+      this.playersByNickname.delete(player.nickname);
+
+      // 如果室長離開，選擇新室長
+      if (this.roomLeader === socketId && this.players.size > 0) {
+        this.roomLeader = this.players.keys().next().value;
+      }
+
+      return true;
+    }
   }
 
   togglePlayerReady(socketId) {
@@ -176,7 +247,11 @@ class GameState {
     
     this.gamePhase = 'playing';
     this.round = 1;
-    this.currentExpert = 0;
+    
+    // 選擇第一個專家（使用玩家ID而不是索引）
+    const playersArray = Array.from(this.players.keys());
+    this.currentExpertId = playersArray[0];
+    
     this.startNewRound();
     return true;
   }
@@ -194,11 +269,8 @@ class GameState {
   }
 
   addHint(socketId, hint) {
-    const playersArray = Array.from(this.players.keys());
-    const expertId = playersArray[this.currentExpert];
-    
     // 專家不能給提示
-    if (socketId === expertId) return false;
+    if (socketId === this.currentExpertId) return false;
     
     // 檢查是否已經給過提示
     const existingHint = this.hints.find(h => h.playerId === socketId);
@@ -217,19 +289,18 @@ class GameState {
   }
 
   makeGuess(socketId, guess) {
-    const playersArray = Array.from(this.players.keys());
-    const expertId = playersArray[this.currentExpert];
-    
     // 只有專家可以猜測
-    if (socketId !== expertId) return { success: false, message: '只有專家可以猜測' };
+    if (socketId !== this.currentExpertId) return { success: false, message: '只有專家可以猜測' };
 
     this.guessAttempts++;
     const isCorrect = guess.toLowerCase().trim() === this.currentTopic.toLowerCase().trim();
 
     if (isCorrect) {
       // 專家得分
-      const expert = this.players.get(expertId);
-      expert.score += 10;
+      const expert = this.players.get(this.currentExpertId);
+      if (expert) {
+        expert.score += 10;
+      }
 
       // 提示者得分
       this.hints.forEach(hint => {
@@ -266,10 +337,20 @@ class GameState {
 
   nextExpert() {
     const playersArray = Array.from(this.players.keys());
-    this.currentExpert = (this.currentExpert + 1) % playersArray.length;
+    const currentIndex = playersArray.indexOf(this.currentExpertId);
     
-    if (this.currentExpert === 0) {
-      this.round++;
+    if (currentIndex === -1) {
+      // 當前專家不在列表中（可能斷線），選擇第一個玩家
+      this.currentExpertId = playersArray[0];
+    } else {
+      // 選擇下一個專家
+      const nextIndex = (currentIndex + 1) % playersArray.length;
+      this.currentExpertId = playersArray[nextIndex];
+      
+      // 如果回到第一個玩家，增加回合數
+      if (nextIndex === 0) {
+        this.round++;
+      }
     }
 
     // 檢查遊戲是否結束
@@ -285,7 +366,7 @@ class GameState {
   getGameState() {
     const playersArray = Array.from(this.players.values());
     const expertPlayer = this.gamePhase === 'playing' ? 
-      playersArray[this.currentExpert] : null;
+      this.players.get(this.currentExpertId) : null;
 
     return {
       gamePhase: this.gamePhase,
@@ -298,23 +379,32 @@ class GameState {
       currentCategory: this.currentCategory,
       hints: this.hints,
       guessAttempts: this.guessAttempts,
-      maxGuessAttempts: this.maxGuessAttempts
+      maxGuessAttempts: this.maxGuessAttempts,
+      disconnectedCount: this.disconnectedPlayers.size
     };
   }
 
   restartGame() {
+    // 重置遊戲狀態但保留玩家
     this.gamePhase = 'waiting';
     this.round = 1;
-    this.currentExpert = 0;
-    this.hints = [];
-    this.guessAttempts = 0;
+    this.currentExpertId = null;
     this.currentTopic = '';
     this.currentCategory = '';
+    this.hints = [];
+    this.guessAttempts = 0;
 
-    // 重置玩家狀態
+    // 重置所有玩家的準備狀態和分數
     for (let player of this.players.values()) {
       player.ready = false;
       player.score = 0;
+    }
+
+    // 將斷線玩家移回並重置
+    for (let [nickname, player] of this.disconnectedPlayers) {
+      player.ready = false;
+      player.score = 0;
+      player.connected = false; // 保持斷線狀態
     }
   }
 }
@@ -329,6 +419,9 @@ io.on('connection', (socket) => {
 
   // 發送歷史聊天記錄
   socket.emit('chat-history', chatManager.getRecentMessages());
+  
+  // 立即發送當前遊戲狀態，讓新連接的用戶能看到即時資訊
+  socket.emit('game-state-update', gameState.getGameState());
 
   // 玩家加入遊戲
   socket.on('join-game', (nickname) => {
@@ -337,17 +430,32 @@ io.on('connection', (socket) => {
     if (result.success) {
       socket.emit('join-success', {
         player: result.player,
-        isRoomLeader: gameState.roomLeader === socket.id
+        isRoomLeader: gameState.roomLeader === socket.id,
+        isReconnect: result.isReconnect
       });
       
       // 廣播更新遊戲狀態
       io.emit('game-state-update', gameState.getGameState());
       
       // 添加系統訊息
-      const systemMessage = chatManager.addSystemMessage(`${nickname} 加入了遊戲`);
+      const messageText = result.isReconnect ? 
+        `${nickname} 重新連接了遊戲` : 
+        `${nickname} 加入了遊戲`;
+      const systemMessage = chatManager.addSystemMessage(messageText);
       io.emit('chat-message', systemMessage);
       
-      console.log(`玩家 ${nickname} 加入遊戲`);
+      console.log(`玩家 ${nickname} ${result.isReconnect ? '重新連接' : '加入遊戲'}`);
+      
+      // 如果是重連且遊戲正在進行，發送當前答案
+      if (result.isReconnect && gameState.gamePhase === 'playing') {
+        const expertId = gameState.currentExpertId;
+        if (socket.id !== expertId) {
+          socket.emit('answer-for-hint', {
+            answer: gameState.currentTopic,
+            category: gameState.currentCategory
+          });
+        }
+      }
     } else {
       socket.emit('join-error', result.message);
     }
@@ -443,10 +551,12 @@ io.on('connection', (socket) => {
             io.emit('chat-message', endMessage);
             io.emit('game-ended', gameState.getGameState());
           } else {
-            const nextExpert = gameState.players.get(Array.from(gameState.players.keys())[gameState.currentExpert]);
-            const nextMessage = chatManager.addGameMessage(`下一回合：${nextExpert.nickname} 當專家`);
-            io.emit('chat-message', nextMessage);
-            io.emit('next-round', gameState.getGameState());
+            const nextExpert = gameState.players.get(gameState.currentExpertId);
+            if (nextExpert) {
+              const nextMessage = chatManager.addGameMessage(`下一回合：${nextExpert.nickname} 當專家`);
+              io.emit('chat-message', nextMessage);
+              io.emit('next-round', gameState.getGameState());
+            }
           }
         }, 3000);
       }
@@ -467,8 +577,7 @@ io.on('connection', (socket) => {
 
   // 獲取當前答案（僅提示者可見）
   socket.on('get-answer', () => {
-    const playersArray = Array.from(gameState.players.keys());
-    const expertId = playersArray[gameState.currentExpert];
+    const expertId = gameState.currentExpertId;
     
     if (socket.id !== expertId && gameState.gamePhase === 'playing') {
       socket.emit('answer-for-hint', {
@@ -484,14 +593,16 @@ io.on('connection', (socket) => {
     const removed = gameState.removePlayer(socket.id);
     
     if (removed && player) {
-      const disconnectMessage = chatManager.addSystemMessage(`${player.nickname} 離開了遊戲`);
+      const disconnectMessage = gameState.gamePhase === 'playing' ? 
+        chatManager.addSystemMessage(`${player.nickname} 暫時離線（30秒內可重連）`) :
+        chatManager.addSystemMessage(`${player.nickname} 離開了遊戲`);
       io.emit('chat-message', disconnectMessage);
       
       io.emit('player-disconnected', {
         playerId: socket.id,
         gameState: gameState.getGameState()
       });
-      console.log(`玩家斷線: ${socket.id}`);
+      console.log(`玩家斷線: ${socket.id} (${player.nickname})`);
     }
   });
 });
