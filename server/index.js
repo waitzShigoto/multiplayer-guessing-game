@@ -612,7 +612,23 @@ io.on('connection', (socket) => {
 
 // API 路由
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', players: gameState.players.size });
+  res.json({ 
+    status: 'OK', 
+    message: 'build success',
+    players: gameState.players.size,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// 新增專門的構建狀態端點
+app.get('/api/build-status', (req, res) => {
+  res.json({
+    status: 'build success',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  });
 });
 
 app.get('/api/game-state', (req, res) => {
@@ -627,6 +643,8 @@ app.get('/api/chat-history', (req, res) => {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 伺服器運行在 http://localhost:${PORT}`);
+  console.log(`✅ Build Success - 構建成功！`);
   console.log(`🎮 遊戲準備就緒！`);
   console.log(`💬 聊天功能已啟用！`);
+  console.log(`⏰ 啟動時間: ${new Date().toISOString()}`);
 });
