@@ -1,46 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import io, { Socket } from 'socket.io-client';
+import React, { useState } from 'react';
 import styled from 'styled-components';
+import { useGameState } from './hooks/useGameState';
+import { WelcomeScreen } from './components/game/WelcomeScreen';
+import { Button } from './components/ui/Button';
+import { Input } from './components/ui/Input';
+import { socketService } from './services/socketService';
+import { generateRandomNickname } from './utils/nameGenerator';
 import ChatBox from './ChatBox';
-
-// 類型定義
-interface Player {
-  id: string;
-  nickname: string;
-  ready: boolean;
-  score: number;
-  connected: boolean;
-}
-
-interface Hint {
-  playerId: string;
-  playerName: string;
-  hint: string;
-}
-
-interface GameState {
-  gamePhase: 'waiting' | 'playing' | 'finished';
-  players: Player[];
-  playerCount: number;
-  maxPlayers: number;
-  roomLeader: string | null;
-  round: number;
-  currentExpert: Player | null;
-  currentCategory: string;
-  hints: Hint[];
-  guessAttempts: number;
-  maxGuessAttempts: number;
-  disconnectedCount?: number; // 斷線玩家數量（可選，向後兼容）
-}
-
-interface Message {
-  id: number;
-  text: string;
-  isError: boolean;
-}
-
-// Socket 連接 - 修改端口為 3001
-const socket: Socket = io('http://localhost:3001');
 
 // 樣式組件
 const AppContainer = styled.div`
@@ -177,61 +143,6 @@ const InputArea = styled.div`
   margin-bottom: 20px;
 `;
 
-const Input = styled.input`
-  flex: 1;
-  padding: 15px;
-  border: 2px solid #e9ecef;
-  border-radius: 10px;
-  font-size: 16px;
-  transition: border-color 0.3s ease;
-
-  &:focus {
-    outline: none;
-    border-color: #667eea;
-  }
-`;
-
-interface ButtonProps {
-  primary?: boolean;
-  success?: boolean;
-  danger?: boolean;
-}
-
-const Button = styled.button<ButtonProps>`
-  padding: 15px 25px;
-  border: none;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  ${props => props.primary && `
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-    }
-  `}
-
-  ${props => props.success && `
-    background: #28a745;
-    color: white;
-  `}
-
-  ${props => props.danger && `
-    background: #dc3545;
-    color: white;
-  `}
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
 interface MessageProps {
   error?: boolean;
 }
@@ -270,172 +181,20 @@ const Controls = styled.div`
 `;
 
 const App: React.FC = () => {
-  // 狀態管理
-  const [gameState, setGameState] = useState<GameState>({
-    gamePhase: 'waiting',
-    players: [],
-    playerCount: 0,
-    maxPlayers: 8,
-    roomLeader: null,
-    round: 1,
-    currentExpert: null,
-    currentCategory: '',
-    hints: [],
-    guessAttempts: 0,
-    maxGuessAttempts: 3
-  });
+  // 使用自定義 Hook
+  const { 
+    gameState, 
+    currentPlayer, 
+    messages, 
+    currentAnswer, 
+    hasSubmittedHint, 
+    addMessage 
+  } = useGameState();
 
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  // 本地狀態
   const [nickname, setNickname] = useState<string>('');
   const [hintInput, setHintInput] = useState<string>('');
   const [guessInput, setGuessInput] = useState<string>('');
-  const [currentAnswer, setCurrentAnswer] = useState<string>('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [hasSubmittedHint, setHasSubmittedHint] = useState<boolean>(false);
-
-  // 隨機名稱生成器
-  const generateRandomNickname = (): string => {
-    const adjectives = [
-      '聰明的', '勇敢的', '可愛的', '神秘的', '快樂的', '冷靜的', '活潑的', '溫柔的',
-      '機智的', '幽默的', '優雅的', '堅強的', '善良的', '創意的', '熱情的', '淡定的',
-      '靈巧的', '開朗的', '專注的', '友善的', '樂觀的', '細心的', '大膽的', '謙虛的'
-    ];
-    
-    const nouns = [
-      '小貓', '小狗', '小熊', '小兔', '小鳥', '小魚', '小龍', '小虎',
-      '獅子', '大象', '熊貓', '企鵝', '海豚', '獨角獸', '鳳凰', '麒麟',
-      '忍者', '騎士', '法師', '戰士', '弓箭手', '盜賊', '學者', '探險家',
-      '星星', '月亮', '太陽', '彩虹', '閃電', '雲朵', '雪花', '花朵'
-    ];
-    
-    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
-    
-    return `${randomAdjective}${randomNoun}`;
-  };
-
-  // 處理隨機名稱生成
-  const handleGenerateNickname = (): void => {
-    const randomName = generateRandomNickname();
-    setNickname(randomName);
-    addMessage(`🎲 隨機生成名稱：${randomName}`, false);
-  };
-
-  // 使用 useCallback 來穩定 resetRoundState 函數
-  const resetRoundState = useCallback((): void => {
-    setHasSubmittedHint(false);
-    setHintInput('');
-    setGuessInput('');
-    setCurrentAnswer('');
-    
-    // 請求答案（如果不是專家）
-    if (gameState.gamePhase === 'playing' && currentPlayer && 
-        gameState.currentExpert?.id !== currentPlayer.id) {
-      socket.emit('get-answer');
-    }
-  }, [gameState.gamePhase, gameState.currentExpert?.id, currentPlayer]);
-
-  // 工具函數
-  const addMessage = useCallback((text: string, isError: boolean = false): void => {
-    const message: Message = { id: Date.now(), text, isError };
-    setMessages(prev => [...prev, message]);
-    
-    // 3秒後自動移除訊息
-    setTimeout(() => {
-      setMessages(prev => prev.filter(m => m.id !== message.id));
-    }, 3000);
-  }, []);
-
-  // Socket 事件監聽
-  useEffect(() => {
-    socket.on('join-success', (data: { player: Player; isRoomLeader: boolean }) => {
-      setCurrentPlayer(data.player);
-      addMessage(`歡迎 ${data.player.nickname}！`, false);
-    });
-
-    socket.on('join-error', (error: string) => {
-      addMessage(error, true);
-    });
-
-    socket.on('game-state-update', (newGameState: GameState) => {
-      setGameState(newGameState);
-    });
-
-    socket.on('game-started', (newGameState: GameState) => {
-      setGameState(newGameState);
-      addMessage('遊戲開始！', false);
-      resetRoundState();
-    });
-
-    socket.on('hint-added', (data: { hint: Hint; gameState: GameState }) => {
-      setGameState(data.gameState);
-      if (data.hint.playerId === currentPlayer?.id) {
-        setHasSubmittedHint(true);
-        addMessage('提示已提交！', false);
-      }
-    });
-
-    socket.on('guess-result', (data: { 
-      correct: boolean; 
-      answer: string | null; 
-      message: string; 
-      gameState: GameState 
-    }) => {
-      addMessage(data.message, !data.correct);
-      setGameState(data.gameState);
-      
-      if (data.answer) {
-        setGuessInput('');
-      }
-    });
-
-    socket.on('next-round', (newGameState: GameState) => {
-      setGameState(newGameState);
-      addMessage('開始新回合！', false);
-      resetRoundState();
-    });
-
-    socket.on('game-ended', (newGameState: GameState) => {
-      setGameState(newGameState);
-      addMessage('遊戲結束！', false);
-    });
-
-    socket.on('game-restarted', (newGameState: GameState) => {
-      setGameState(newGameState);
-      addMessage('遊戲重置，準備開始新的一局！', false);
-      resetRoundState();
-    });
-
-    socket.on('answer-for-hint', (data: { answer: string; category: string }) => {
-      setCurrentAnswer(data.answer);
-    });
-
-    socket.on('player-disconnected', (data: { playerId: string; gameState: GameState }) => {
-      setGameState(data.gameState);
-    });
-
-    return () => {
-      socket.off('join-success');
-      socket.off('join-error');
-      socket.off('game-state-update');
-      socket.off('game-started');
-      socket.off('hint-added');
-      socket.off('guess-result');
-      socket.off('next-round');
-      socket.off('game-ended');
-      socket.off('game-restarted');
-      socket.off('answer-for-hint');
-      socket.off('player-disconnected');
-    };
-  }, [currentPlayer, addMessage, resetRoundState]);
-
-  // 監聽遊戲狀態變化，更新答案
-  useEffect(() => {
-    if (gameState.gamePhase === 'playing' && currentPlayer && 
-        gameState.currentExpert?.id !== currentPlayer.id) {
-      socket.emit('get-answer');
-    }
-  }, [gameState.currentExpert, gameState.gamePhase, currentPlayer]);
 
   // 事件處理函數
   const handleJoinGame = (): void => {
@@ -443,15 +202,21 @@ const App: React.FC = () => {
       addMessage('請輸入暱稱', true);
       return;
     }
-    socket.emit('join-game', nickname.trim());
+    socketService.joinGame(nickname.trim());
+  };
+
+  const handleGenerateNickname = (): void => {
+    const randomName = generateRandomNickname();
+    setNickname(randomName);
+    addMessage(`🎲 隨機生成名稱：${randomName}`, false);
   };
 
   const handleToggleReady = (): void => {
-    socket.emit('toggle-ready');
+    socketService.toggleReady();
   };
 
   const handleStartGame = (): void => {
-    socket.emit('start-game');
+    socketService.startGame();
   };
 
   const handleSubmitHint = (): void => {
@@ -459,7 +224,8 @@ const App: React.FC = () => {
       addMessage('請輸入提示', true);
       return;
     }
-    socket.emit('submit-hint', hintInput.trim());
+    socketService.submitHint(hintInput.trim());
+    setHintInput('');
   };
 
   const handleMakeGuess = (): void => {
@@ -467,11 +233,12 @@ const App: React.FC = () => {
       addMessage('請輸入猜測', true);
       return;
     }
-    socket.emit('make-guess', guessInput.trim());
+    socketService.makeGuess(guessInput.trim());
+    setGuessInput('');
   };
 
   const handleRestartGame = (): void => {
-    socket.emit('restart-game');
+    socketService.restartGame();
   };
 
   // 鍵盤事件處理
@@ -525,57 +292,6 @@ const App: React.FC = () => {
       </HintItem>
     ));
   };
-
-  // 渲染歡迎畫面
-  const renderWelcomeScreen = (): JSX.Element => (
-    <GameArea>
-      <div style={{ textAlign: 'center' }}>
-        <h3>🎮 歡迎來到多人輪流猜字遊戲！</h3>
-        <p>請輸入你的暱稱來加入遊戲。第一位加入的玩家將成為室長。</p>
-        <InputArea>
-          <Input
-            type="text"
-            placeholder="輸入你的暱稱..."
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            onKeyPress={(e) => handleKeyPress(e, handleJoinGame)}
-            maxLength={20}
-          />
-          <Button 
-            style={{ 
-              minWidth: '50px',
-              padding: '15px 12px',
-              background: '#f8f9fa',
-              border: '2px solid #e9ecef',
-              color: '#495057',
-              fontSize: '18px',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#e9ecef';
-              e.currentTarget.style.transform = 'scale(1.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#f8f9fa';
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-            onClick={handleGenerateNickname}
-            title="隨機生成名稱"
-          >
-            🎲
-          </Button>
-          <Button primary onClick={handleJoinGame}>
-            加入遊戲
-          </Button>
-        </InputArea>
-        <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
-          💡 點擊骰子可以隨機生成有趣的名稱
-        </p>
-      </div>
-    </GameArea>
-  );
 
   // 渲染等待畫面
   const renderWaitingScreen = (): JSX.Element => (
@@ -768,7 +484,15 @@ const App: React.FC = () => {
         )}
 
         {/* 遊戲內容區域 */}
-        {!currentPlayer && renderWelcomeScreen()}
+        {!currentPlayer && (
+          <WelcomeScreen
+            nickname={nickname}
+            setNickname={setNickname}
+            onJoinGame={handleJoinGame}
+            onGenerateNickname={handleGenerateNickname}
+            onKeyPress={handleKeyPress}
+          />
+        )}
         {currentPlayer && gameState.gamePhase === 'waiting' && renderWaitingScreen()}
         {currentPlayer && gameState.gamePhase === 'playing' && renderGameScreen()}
         {currentPlayer && gameState.gamePhase === 'finished' && renderEndScreen()}
@@ -786,7 +510,7 @@ const App: React.FC = () => {
       {/* 聊天區域 */}
       <ChatContainer>
         <ChatBox 
-          socket={socket} 
+          socket={socketService.getSocket()} 
           currentPlayer={currentPlayer}
           gamePhase={gameState.gamePhase}
         />
