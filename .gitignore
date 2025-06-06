@@ -1,0 +1,240 @@
+# 🎮 多人輪流專家猜測遊戲 .gitignore
+
+# ===== 依賴套件 =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===== 環境變數和配置 =====
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ===== 建置輸出 =====
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vuepress/dist
+
+# ===== React 相關 =====
+# Create React App 建置輸出
+client/build/
+
+# React 相關快取
+.cache/
+.parcel-cache/
+
+# ===== TypeScript 相關 =====
+*.tsbuildinfo
+.tscache/
+
+# ===== 編輯器和 IDE =====
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains 系列 (WebStorm, IntelliJ)
+.idea/
+*.swp
+*.swo
+
+# Vim
+*~
+*.swp
+*.swo
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ===== macOS 系統檔案 =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ===== Windows 系統檔案 =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== Linux 系統檔案 =====
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ===== 記錄檔 =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ===== 測試覆蓋率報告 =====
+coverage/
+*.lcov
+.nyc_output
+
+# ===== 臨時檔案 =====
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# ===== Runtime 檔案 =====
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===== 快取目錄 =====
+.npm
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# ===== Optional npm 快取目錄 =====
+.npm
+
+# ===== Optional eslint 快取 =====
+.eslintcache
+
+# ===== Optional stylelint 快取 =====
+.stylelintcache
+
+# ===== Microbundle 快取 =====
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# ===== Optional REPL history =====
+.node_repl_history
+
+# ===== 輸出的 tarball =====
+*.tgz
+
+# ===== Yarn Integrity file =====
+.yarn-integrity
+
+# ===== dotenv 環境變數檔案 =====
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# ===== parcel-bundler 快取 =====
+.cache
+.parcel-cache
+
+# ===== Next.js 建置輸出 =====
+.next
+out
+
+# ===== Nuxt.js 建置 / 產生輸出 =====
+.nuxt
+dist
+
+# ===== Gatsby 檔案 =====
+.cache/
+public
+
+# ===== Storybook 建置輸出 =====
+.out
+.storybook-out
+storybook-static
+
+# ===== Temporary folders =====
+.tmp
+.temp
+
+# ===== 運行時資料 =====
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===== Coverage directory used by tools like istanbul =====
+coverage
+*.lcov
+
+# ===== nyc test coverage =====
+.nyc_output
+
+# ===== Jest 測試快取 =====
+.jest/
+
+# ===== Cypress =====
+cypress/videos/
+cypress/screenshots/
+
+# ===== 專案特定忽略 =====
+# 遊戲記錄檔（如果有的話）
+game-logs/
+*.game.log
+
+# 用戶上傳的檔案（如果有的話）
+uploads/
+user-data/
+
+# 備份檔案
+*.backup
+*.bak
+backup/
+
+# ===== 部署相關 =====
+# Vercel
+.vercel
+
+# Netlify
+.netlify
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
