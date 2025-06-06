@@ -5,13 +5,10 @@ class SocketService {
   private socket: Socket;
 
   constructor() {
-  this.socket = io(
-    process.env.REACT_APP_SERVER_URL || 
-    (process.env.NODE_ENV === 'production' 
-      ? 'https://multiplayer-guessing-game.onrender.com'
-      : 'http://localhost:3001')
-  );
-}
+    this.socket = io(
+      process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'
+    );
+  }
 
   getSocket(): Socket {
     return this.socket;

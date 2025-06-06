@@ -9,7 +9,7 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.FRONTEND_URL, "https://multiplayer-game-frontend.onrender.com"]
+      ? process.env.FRONTEND_URL
       : "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true
