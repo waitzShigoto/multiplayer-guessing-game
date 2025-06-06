@@ -164,7 +164,6 @@ dist
 
 # ===== Gatsby 檔案 =====
 .cache/
-public
 
 # ===== Storybook 建置輸出 =====
 .out
