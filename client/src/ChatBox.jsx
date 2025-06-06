@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { CHAT_PRESETS, PRESET_CATEGORIES } from './constants/chatPresets';
 
 // 聊天容器樣式
 const ChatContainer = styled.div`
@@ -105,6 +106,101 @@ const ChatInput = styled.div`
 const InputGroup = styled.div`
   display: flex;
   gap: 10px;
+  align-items: flex-start;
+`;
+
+const PresetButton = styled.button`
+  padding: 12px;
+  background: #f8f9fa;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 16px;
+  position: relative;
+  height: 48px;
+  min-width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background: #e9ecef;
+    border-color: #667eea;
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #667eea;
+  }
+`;
+
+const PresetDropdown = styled.div`
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: white;
+  border: 2px solid #e9ecef;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  width: 300px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 1000;
+  margin-bottom: 5px;
+`;
+
+const PresetHeader = styled.div`
+  padding: 15px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+  font-weight: bold;
+  color: #333;
+`;
+
+const CategoryTabs = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 10px;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+`;
+
+const CategoryTab = styled.button`
+  padding: 6px 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 15px;
+  background: ${props => props.active ? '#667eea' : 'white'};
+  color: ${props => props.active ? 'white' : '#666'};
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: ${props => props.active ? '#667eea' : '#f0f0f0'};
+  }
+`;
+
+const PresetList = styled.div`
+  max-height: 250px;
+  overflow-y: auto;
+`;
+
+const PresetItem = styled.div`
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+  
+  &:hover {
+    background: #f8f9fa;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
 `;
 
 const MessageInput = styled.input`
@@ -114,6 +210,8 @@ const MessageInput = styled.input`
   border-radius: 8px;
   font-size: 14px;
   transition: border-color 0.3s ease;
+  height: 48px;
+  box-sizing: border-box;
   
   &:focus {
     outline: none;
@@ -134,6 +232,8 @@ const SendButton = styled.button`
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  height: 48px;
+  box-sizing: border-box;
   
   &:hover {
     transform: translateY(-1px);
@@ -164,7 +264,10 @@ const ChatBox = ({ socket, currentPlayer, gamePhase }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('全部');
   const messagesEndRef = useRef(null);
+  const presetRef = useRef(null);
 
   // 滾動到最新訊息
   const scrollToBottom = () => {
@@ -174,6 +277,20 @@ const ChatBox = ({ socket, currentPlayer, gamePhase }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 點擊外部關閉預設詞條
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (presetRef.current && !presetRef.current.contains(event.target)) {
+        setShowPresets(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Socket 事件監聽
   useEffect(() => {
@@ -227,6 +344,20 @@ const ChatBox = ({ socket, currentPlayer, gamePhase }) => {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  // 選擇預設詞條
+  const selectPreset = (text) => {
+    setInputMessage(text);
+    setShowPresets(false);
+  };
+
+  // 篩選預設詞條
+  const getFilteredPresets = () => {
+    if (selectedCategory === '全部') {
+      return CHAT_PRESETS;
+    }
+    return CHAT_PRESETS.filter(preset => preset.category === selectedCategory);
   };
 
   // 格式化時間
@@ -297,6 +428,47 @@ const ChatBox = ({ socket, currentPlayer, gamePhase }) => {
 
       <ChatInput>
         <InputGroup>
+          <div style={{ position: 'relative' }} ref={presetRef}>
+            <PresetButton
+              onClick={() => setShowPresets(!showPresets)}
+              disabled={!currentPlayer || !isConnected}
+              title="快速選擇常用語句"
+            >
+              💬
+            </PresetButton>
+            
+            {showPresets && (
+              <PresetDropdown>
+                <PresetHeader>
+                  💬 快速選擇
+                </PresetHeader>
+                
+                <CategoryTabs>
+                  {PRESET_CATEGORIES.map(category => (
+                    <CategoryTab
+                      key={category}
+                      active={selectedCategory === category}
+                      onClick={() => setSelectedCategory(category)}
+                    >
+                      {category}
+                    </CategoryTab>
+                  ))}
+                </CategoryTabs>
+                
+                <PresetList>
+                  {getFilteredPresets().map((preset, index) => (
+                    <PresetItem
+                      key={index}
+                      onClick={() => selectPreset(preset.text)}
+                    >
+                      {preset.text}
+                    </PresetItem>
+                  ))}
+                </PresetList>
+              </PresetDropdown>
+            )}
+          </div>
+          
           <MessageInput
             type="text"
             placeholder={
