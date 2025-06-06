@@ -1,4 +1,4 @@
-# 🎮 多人輪流專家猜測遊戲 .gitignore
+# 🎮 多人輪流猜字遊戲 .gitignore
 
 # ===== 依賴套件 =====
 node_modules/

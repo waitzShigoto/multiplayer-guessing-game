@@ -293,6 +293,34 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasSubmittedHint, setHasSubmittedHint] = useState<boolean>(false);
 
+  // 隨機名稱生成器
+  const generateRandomNickname = (): string => {
+    const adjectives = [
+      '聰明的', '勇敢的', '可愛的', '神秘的', '快樂的', '冷靜的', '活潑的', '溫柔的',
+      '機智的', '幽默的', '優雅的', '堅強的', '善良的', '創意的', '熱情的', '淡定的',
+      '靈巧的', '開朗的', '專注的', '友善的', '樂觀的', '細心的', '大膽的', '謙虛的'
+    ];
+    
+    const nouns = [
+      '小貓', '小狗', '小熊', '小兔', '小鳥', '小魚', '小龍', '小虎',
+      '獅子', '大象', '熊貓', '企鵝', '海豚', '獨角獸', '鳳凰', '麒麟',
+      '忍者', '騎士', '法師', '戰士', '弓箭手', '盜賊', '學者', '探險家',
+      '星星', '月亮', '太陽', '彩虹', '閃電', '雲朵', '雪花', '花朵'
+    ];
+    
+    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+    
+    return `${randomAdjective}${randomNoun}`;
+  };
+
+  // 處理隨機名稱生成
+  const handleGenerateNickname = (): void => {
+    const randomName = generateRandomNickname();
+    setNickname(randomName);
+    addMessage(`🎲 隨機生成名稱：${randomName}`, false);
+  };
+
   // 使用 useCallback 來穩定 resetRoundState 函數
   const resetRoundState = useCallback((): void => {
     setHasSubmittedHint(false);
@@ -502,7 +530,7 @@ const App: React.FC = () => {
   const renderWelcomeScreen = (): JSX.Element => (
     <GameArea>
       <div style={{ textAlign: 'center' }}>
-        <h3>🎮 歡迎來到多人輪流專家猜測遊戲！</h3>
+        <h3>🎮 歡迎來到多人輪流猜字遊戲！</h3>
         <p>請輸入你的暱稱來加入遊戲。第一位加入的玩家將成為室長。</p>
         <InputArea>
           <Input
@@ -513,10 +541,38 @@ const App: React.FC = () => {
             onKeyPress={(e) => handleKeyPress(e, handleJoinGame)}
             maxLength={20}
           />
+          <Button 
+            style={{ 
+              minWidth: '50px',
+              padding: '15px 12px',
+              background: '#f8f9fa',
+              border: '2px solid #e9ecef',
+              color: '#495057',
+              fontSize: '18px',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#e9ecef';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#f8f9fa';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            onClick={handleGenerateNickname}
+            title="隨機生成名稱"
+          >
+            🎲
+          </Button>
           <Button primary onClick={handleJoinGame}>
             加入遊戲
           </Button>
         </InputArea>
+        <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
+          💡 點擊骰子可以隨機生成有趣的名稱
+        </p>
       </div>
     </GameArea>
   );
@@ -680,7 +736,7 @@ const App: React.FC = () => {
     <AppContainer>
       <GameContainer>
         <Header>
-          <h1>🎮 多人輪流專家猜測遊戲</h1>
+          <h1>🎮 多人輪流猜字遊戲</h1>
           <p>最多8人同樂，輪流當專家！</p>
         </Header>
 
