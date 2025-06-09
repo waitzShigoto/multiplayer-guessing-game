@@ -6,18 +6,40 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// 動態設置 CORS origin
+const getAllowedOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL;
+  } else {
+    // 開發環境允許多個本地端口
+    return [
+      "http://localhost:3000",
+      "http://localhost:3001", 
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001"
+    ];
+  }
+};
+
+const allowedOrigins = getAllowedOrigins();
+console.log('🌐 允許的 CORS origins:', allowedOrigins);
+console.log('🔧 NODE_ENV:', process.env.NODE_ENV);
+console.log('🔧 FRONTEND_URL:', process.env.FRONTEND_URL);
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? process.env.FRONTEND_URL
-      : "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// 中間件
-app.use(cors());
+// 中間件 - 也要設置 Express 的 CORS
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(express.json());
 
 // 聊天訊息存儲 (簡單的內存存儲)
@@ -418,7 +440,8 @@ const chatManager = new ChatManager();
 
 // Socket.IO 連接處理
 io.on('connection', (socket) => {
-  console.log(`玩家連接: ${socket.id}`);
+  console.log(`🔗 玩家連接: ${socket.id}`);
+  console.log(`📊 當前連接數: ${io.engine.clientsCount}`);
 
   // 發送歷史聊天記錄
   socket.emit('chat-history', chatManager.getRecentMessages());
@@ -428,9 +451,13 @@ io.on('connection', (socket) => {
 
   // 玩家加入遊戲
   socket.on('join-game', (nickname) => {
+    console.log(`🎮 收到加入遊戲請求: ${nickname} (Socket: ${socket.id})`);
+    
     const result = gameState.addPlayer(socket.id, nickname);
     
     if (result.success) {
+      console.log(`✅ 玩家 ${nickname} 成功加入遊戲`);
+      
       socket.emit('join-success', {
         player: result.player,
         isRoomLeader: gameState.roomLeader === socket.id,
@@ -447,7 +474,7 @@ io.on('connection', (socket) => {
       const systemMessage = chatManager.addSystemMessage(messageText);
       io.emit('chat-message', systemMessage);
       
-      console.log(`玩家 ${nickname} ${result.isReconnect ? '重新連接' : '加入遊戲'}`);
+      console.log(`📢 廣播玩家加入訊息: ${messageText}`);
       
       // 如果是重連且遊戲正在進行，發送當前答案
       if (result.isReconnect && gameState.gamePhase === 'playing') {
@@ -460,6 +487,7 @@ io.on('connection', (socket) => {
         }
       }
     } else {
+      console.log(`❌ 玩家 ${nickname} 加入失敗: ${result.message}`);
       socket.emit('join-error', result.message);
     }
   });

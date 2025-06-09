@@ -188,6 +188,7 @@ const App: React.FC = () => {
     messages, 
     currentAnswer, 
     hasSubmittedHint, 
+    isConnected,
     addMessage 
   } = useGameState();
 
@@ -202,6 +203,13 @@ const App: React.FC = () => {
       addMessage('請輸入暱稱', true);
       return;
     }
+    
+    if (!isConnected) {
+      addMessage('尚未連接到服務器，請稍候再試', true);
+      return;
+    }
+    
+    console.log('嘗試加入遊戲:', nickname.trim());
     socketService.joinGame(nickname.trim());
   };
 
@@ -491,6 +499,7 @@ const App: React.FC = () => {
             onJoinGame={handleJoinGame}
             onGenerateNickname={handleGenerateNickname}
             onKeyPress={handleKeyPress}
+            isConnected={isConnected}
           />
         )}
         {currentPlayer && gameState.gamePhase === 'waiting' && renderWaitingScreen()}

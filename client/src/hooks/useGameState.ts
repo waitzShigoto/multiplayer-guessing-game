@@ -22,6 +22,7 @@ export const useGameState = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAnswer, setCurrentAnswer] = useState<string>('');
   const [hasSubmittedHint, setHasSubmittedHint] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
 
   const addMessage = useCallback((text: string, isError: boolean = false): void => {
     const message: Message = { id: Date.now(), text, isError };
@@ -45,6 +46,25 @@ export const useGameState = () => {
 
   useEffect(() => {
     const socket = socketService.getSocket();
+
+    // 監聽連接狀態
+    socket.on('connect', () => {
+      console.log('Socket 連接成功');
+      setIsConnected(true);
+      addMessage('已連接到服務器', false);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Socket 斷開連接');
+      setIsConnected(false);
+      addMessage('與服務器斷開連接', true);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket 連接錯誤:', error);
+      setIsConnected(false);
+      addMessage('連接服務器失敗，請檢查網絡', true);
+    });
 
     // 監聽遊戲狀態更新
     socket.on(SOCKET_EVENTS.JOIN_SUCCESS, (data: { player: Player; isRoomLeader: boolean }) => {
@@ -110,6 +130,9 @@ export const useGameState = () => {
     });
 
     return () => {
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('connect_error');
       socket.off(SOCKET_EVENTS.JOIN_SUCCESS);
       socket.off(SOCKET_EVENTS.JOIN_ERROR);
       socket.off(SOCKET_EVENTS.GAME_STATE_UPDATE);
@@ -138,6 +161,7 @@ export const useGameState = () => {
     messages,
     currentAnswer,
     hasSubmittedHint,
+    isConnected,
     addMessage,
     resetRoundState
   };

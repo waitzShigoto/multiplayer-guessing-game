@@ -5,9 +5,23 @@ class SocketService {
   private socket: Socket;
 
   constructor() {
-    this.socket = io(
-      process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'
-    );
+    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+    console.log('🔗 嘗試連接到服務器:', serverUrl);
+    
+    this.socket = io(serverUrl);
+    
+    // 添加連接事件監聽
+    this.socket.on('connect', () => {
+      console.log('✅ Socket 連接成功! Socket ID:', this.socket.id);
+    });
+    
+    this.socket.on('disconnect', (reason) => {
+      console.log('❌ Socket 斷開連接, 原因:', reason);
+    });
+    
+    this.socket.on('connect_error', (error) => {
+      console.error('🚫 Socket 連接錯誤:', error);
+    });
   }
 
   getSocket(): Socket {
@@ -16,6 +30,7 @@ class SocketService {
 
   // 遊戲相關方法
   joinGame(nickname: string): void {
+    console.log('🎮 發送加入遊戲請求:', nickname);
     this.socket.emit(SOCKET_EVENTS.JOIN_GAME, nickname);
   }
 

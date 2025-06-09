@@ -8,6 +8,7 @@ interface InputProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onKeyPress?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   maxLength?: number;
+  disabled?: boolean;
 }
 
 const StyledInput = styled.input`
@@ -21,6 +22,13 @@ const StyledInput = styled.input`
   &:focus {
     outline: none;
     border-color: #667eea;
+  }
+
+  &:disabled {
+    background-color: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 `;
 
